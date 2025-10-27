@@ -1,4 +1,4 @@
-import { generateItinerary } from "../services/itinerary.service.js";
+import { generateItinerary } from "../utils/plannerUtils.js";
 
 export async function createItinerary(req, res) {
   try {

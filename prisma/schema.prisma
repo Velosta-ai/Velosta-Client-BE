@@ -1,15 +1,58 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
-}
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+model User {
+  id             String          @id @default(cuid())
+  email          String          @unique
+  name           String?
+  picture        String?
+  password       String?
+  provider       String          @default("google")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  refreshTokens  RefreshToken[]
+  blogs          Blog[]          @relation("UserBlogs")
+
+  trips          Trip[]          @relation("UserTrips")
+}
+
+model Blog {
+  id         String   @id @default(cuid())
+  title      String
+  summary    String?
+  content    String
+  coverImage String?
+  tags       String[] @default([])
+  authorId   String
+  author     User     @relation("UserBlogs", fields: [authorId], references: [id])
+  authorName String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  revoked   Boolean  @default(false)
+}
+
+model Trip {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("UserTrips", fields: [userId], references: [id])
+  destination String
+  startDate   DateTime
+  endDate     DateTime
+  preferences Json
+  plan        Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
