@@ -5,15 +5,10 @@ import { signAccessToken } from "./authController.js";
 
 export const googleAuth = async (req, res) => {
   try {
-    console.log("entred");
-    const { token } = req.body; // Google ID token
-    console.log(token, "holalal");
+    const { token } = req.body;
 
     if (!token)
       return res.status(400).json({ message: "Missing Google token" });
-    console.log(token, "holalal");
-    // return;
-    // Verify token with Google
     const googleRes = await fetch(
       `https://www.googleapis.com/oauth2/v3/tokeninfo?id_token=${token}`
     );
@@ -25,7 +20,6 @@ export const googleAuth = async (req, res) => {
 
     const { email, name, picture } = googleData;
 
-    // Check if user exists or create new one
     let user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       user = await prisma.user.create({
@@ -38,7 +32,6 @@ export const googleAuth = async (req, res) => {
       });
     }
 
-    // Generate JWT
     const accessToken = signAccessToken(user);
 
     res.status(200).json({
