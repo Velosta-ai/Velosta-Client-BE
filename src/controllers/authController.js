@@ -7,9 +7,9 @@ import express from "express";
 const router = express.Router();
 
 // Helper functions
-const signAccessToken = (user) => {
+export const signAccessToken = (user) => {
   return jwt.sign({ id: user.id }, process.env.JWT_ACCESS_SECRET, {
-    expiresIn: "15m", // short-lived
+    expiresIn: "7d", // short-lived
   });
 };
 
