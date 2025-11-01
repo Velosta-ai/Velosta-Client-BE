@@ -1,60 +1,102 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMENI_API_KEY);
+const API_KEYS = [
+  process.env.GEMENI_API_KEY1,
+  process.env.GEMENI_API_KEY2,
+  process.env.GEMENI_API_KEY3,
+];
+
+async function tryGenerateWithFallback(generateFn) {
+  for (let i = 0; i < API_KEYS.length; i++) {
+    const apiKey = API_KEYS[i];
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-pro",
+      generationConfig: {
+        temperature: 0.7,
+        topP: 0.9,
+        topK: 40,
+        maxOutputTokens: 8192,
+      },
+    });
+
+    try {
+      return await generateFn(model, i + 1);
+    } catch (error) {
+      const status =
+        error?.status || error?.response?.status || error?.cause?.code;
+
+      console.warn(
+        `⚠️ Gemini API key ${i + 1} failed: ${status || error.message}`
+      );
+
+      if (
+        status === 429 || // Too many requests
+        status === 500 ||
+        status === 501 ||
+        status === 502 ||
+        status === 503 ||
+        status === 504 ||
+        /overloaded|unavailable|quota|timeout/i.test(error.message)
+      ) {
+        console.log(`🔁 Retrying with GEMENI_API_KEY${i + 2}...`);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error("All Gemini API keys failed. Please try again later.");
+}
 
 export async function generateItinerary(input) {
-  const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-pro",
-    generationConfig: {
-      temperature: 0.7,
-      topP: 0.9,
-      topK: 40,
-      maxOutputTokens: 8192,
-    },
-  });
+  return await tryGenerateWithFallback(async (model, keyIndex) => {
+    console.log(`🧠 Using GEMENI_API_KEY${keyIndex} for itinerary generation`);
 
-  // Check if this is a modification request
-  if (input.isModificationRequest && input.currentItinerary) {
-    return await handleModificationRequest(model, input);
-  }
-
-  // Initial generation
-  const prompt = buildFlexiblePrompt(input);
-
-  try {
-    const result = await model.generateContent(prompt);
-    let text = result.response.text();
-
-    let cleanedText = text
-      .replace(/```json\s*/gi, "")
-      .replace(/```/g, "")
-      .replace(/[\u0000-\u001F]+/g, "")
-      .trim();
-
-    const firstBrace = cleanedText.indexOf("{");
-    const lastBrace = cleanedText.lastIndexOf("}");
-    if (firstBrace !== -1 && lastBrace !== -1) {
-      cleanedText = cleanedText.slice(firstBrace, lastBrace + 1);
+    // Check if this is a modification request
+    if (input.isModificationRequest && input.currentItinerary) {
+      return await handleModificationRequest(model, input);
     }
 
-    let itinerary;
+    // Initial generation
+    const prompt = buildFlexiblePrompt(input);
+
     try {
-      itinerary = JSON.parse(cleanedText);
-    } catch (jsonError) {
-      console.error("❌ Invalid JSON from Gemini:", cleanedText);
-      throw new Error("Gemini returned malformed JSON: " + jsonError.message);
-    }
+      const result = await model.generateContent(prompt);
+      let text = result.response.text();
 
-    return {
-      ...itinerary,
-      generatedAt: new Date().toISOString(),
-      model: "gemini-2.5-pro",
-      input,
-    };
-  } catch (error) {
-    console.error("🚨 Error generating itinerary:", error);
-    throw new Error(`Failed to generate itinerary: ${error.message}`);
-  }
+      let cleanedText = text
+        .replace(/```json\s*/gi, "")
+        .replace(/```/g, "")
+        .replace(/[\u0000-\u001F]+/g, "")
+        .trim();
+
+      const firstBrace = cleanedText.indexOf("{");
+      const lastBrace = cleanedText.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        cleanedText = cleanedText.slice(firstBrace, lastBrace + 1);
+      }
+
+      let itinerary;
+      try {
+        itinerary = JSON.parse(cleanedText);
+      } catch (jsonError) {
+        console.error("❌ Invalid JSON from Gemini:", cleanedText);
+        throw new Error("Gemini returned malformed JSON: " + jsonError.message);
+      }
+
+      return {
+        ...itinerary,
+        generatedAt: new Date().toISOString(),
+        model: "gemini-2.5-pro",
+        input,
+      };
+    } catch (error) {
+      console.error(`🚨 Error generating itinerary (key ${keyIndex}):`, error);
+      throw new Error(`Failed to generate itinerary: ${error.message}`);
+    }
+  });
 }
 
 /**
